@@ -363,41 +363,23 @@ button:focus-visible,
 }
 .day.is-saturday,
 .mobile-day.is-saturday {
-  background: linear-gradient(
-    180deg,
-    rgba(37, 99, 235, 0.10),
-    rgba(255, 255, 255, 0.96)
-  );
-  border-color: rgba(37, 99, 235, 0.30);
+  background: linear-gradient(180deg, rgba(37, 99, 235, 0.055), rgba(255, 255, 255, 0.96));
+  border-color: rgba(37, 99, 235, 0.22);
 }
-
 .day.is-sunday-or-holiday,
 .mobile-day.is-sunday-or-holiday {
-  background: linear-gradient(
-    180deg,
-    rgba(220, 38, 38, 0.10),
-    rgba(255, 255, 255, 0.96)
-  );
-  border-color: rgba(220, 38, 38, 0.30);
+  background: linear-gradient(180deg, rgba(220, 38, 38, 0.055), rgba(255, 255, 255, 0.96));
+  border-color: rgba(220, 38, 38, 0.22);
 }
 .dark .day.is-saturday,
 .dark .mobile-day.is-saturday {
-  background: linear-gradient(
-    180deg,
-    rgba(37, 99, 235, 0.22),
-    #17131a
-  );
-  border-color: rgba(147, 197, 253, 0.34);
+  background: linear-gradient(180deg, rgba(37, 99, 235, 0.16), #17131a);
+  border-color: rgba(147, 197, 253, 0.26);
 }
-
 .dark .day.is-sunday-or-holiday,
 .dark .mobile-day.is-sunday-or-holiday {
-  background: linear-gradient(
-    180deg,
-    rgba(220, 38, 38, 0.22),
-    #17131a
-  );
-  border-color: rgba(252, 165, 165, 0.34);
+  background: linear-gradient(180deg, rgba(220, 38, 38, 0.16), #17131a);
+  border-color: rgba(252, 165, 165, 0.26);
 }
 .calendar-summary {
   display: grid;
@@ -589,5 +571,84 @@ button.small,
   }
   .mobile-day .status-buttons {
     margin-top: 8px;
+  }
+}
+
+/* v1.0.22: スマホ集計を「アイコン上・数字下」に固定し、土日背景を少し濃く */
+.day.is-saturday,
+.mobile-day.is-saturday {
+  background: linear-gradient(180deg, rgba(37, 99, 235, 0.10), rgba(255, 255, 255, 0.96));
+  border-color: rgba(37, 99, 235, 0.30);
+}
+.day.is-sunday-or-holiday,
+.mobile-day.is-sunday-or-holiday {
+  background: linear-gradient(180deg, rgba(220, 38, 38, 0.10), rgba(255, 255, 255, 0.96));
+  border-color: rgba(220, 38, 38, 0.30);
+}
+.dark .day.is-saturday,
+.dark .mobile-day.is-saturday {
+  background: linear-gradient(180deg, rgba(37, 99, 235, 0.22), #17131a);
+  border-color: rgba(147, 197, 253, 0.34);
+}
+.dark .day.is-sunday-or-holiday,
+.dark .mobile-day.is-sunday-or-holiday {
+  background: linear-gradient(180deg, rgba(220, 38, 38, 0.22), #17131a);
+  border-color: rgba(252, 165, 165, 0.34);
+}
+.calendar-summary {
+  display: grid !important;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  gap: 2px !important;
+  align-items: center;
+  width: 100%;
+  max-width: 220px;
+  margin: 8px auto 6px;
+  padding: 6px 8px;
+  box-sizing: border-box;
+  white-space: normal !important;
+}
+.calendar-summary-icons,
+.calendar-summary-counts {
+  display: contents !important;
+}
+.calendar-summary-pair {
+  display: grid;
+  grid-template-rows: auto auto;
+  align-items: center;
+  justify-items: center;
+  gap: 2px;
+  min-width: 0;
+  line-height: 1.05;
+}
+.calendar-summary-icon,
+.calendar-summary-number {
+  display: block !important;
+  min-width: 0 !important;
+  width: 100%;
+  text-align: center;
+  background: transparent !important;
+}
+.calendar-summary-icon {
+  font-size: 0.95rem;
+}
+.calendar-summary-number {
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+@media (max-width: 900px) {
+  .mobile-day .calendar-summary,
+  .calendar-summary {
+    display: grid !important;
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    width: 100%;
+    max-width: none;
+    margin: 10px 0 8px;
+    overflow: hidden;
+  }
+  .calendar-summary-icon {
+    font-size: 1.05rem;
+  }
+  .calendar-summary-number {
+    font-size: 0.98rem;
   }
 }
