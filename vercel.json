@@ -1,0 +1,7 @@
+{
+  "rewrites": [
+    { "source": "/s/:shareId", "destination": "/" },
+    { "source": "/admin/:ownerToken", "destination": "/" },
+    { "source": "/(.*)", "destination": "/" }
+  ]
+}

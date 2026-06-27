@@ -1,0 +1,1 @@
+{"root":["./src/main.tsx","./src/vite-env.d.ts","./src/components/calendar.tsx","./src/lib/supabaseclient.ts","./src/logic/scheduler.ts","./src/logic/textparser.ts","./src/utils/dateutils.ts","./src/utils/holidays.ts"],"version":"6.0.3"}
