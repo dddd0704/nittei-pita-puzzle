@@ -48,3 +48,119 @@
 .support:hover {
   background: #e67800;
 }
+/* v1.0.12: 参加者向け入力状況と主催者向け全員一覧 */
+.name-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 16px;
+}
+.name-chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #ead7e3;
+  background: #fff7fb;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-weight: 600;
+}
+.dark .name-chip {
+  background: #17131a;
+  border-color: #3b2c43;
+}
+.summary-list {
+  display: grid;
+  gap: 8px;
+  max-height: 420px;
+  overflow: auto;
+}
+.summary-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.4fr) repeat(5, minmax(68px, auto));
+  gap: 8px;
+  align-items: center;
+  border: 1px solid #ead7e3;
+  border-radius: 14px;
+  padding: 9px 10px;
+  background: #fff;
+}
+.dark .summary-row {
+  background: #17131a;
+  border-color: #3b2c43;
+}
+.summary-row span {
+  white-space: nowrap;
+}
+.matrix-scroll {
+  max-width: 100%;
+  overflow: auto;
+  border: 1px solid #ead7e3;
+  border-radius: 16px;
+}
+.dark .matrix-scroll {
+  border-color: #3b2c43;
+}
+.availability-matrix {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: #fff;
+}
+.dark .availability-matrix {
+  background: #17131a;
+}
+.availability-matrix th,
+.availability-matrix td {
+  border-right: 1px solid #ead7e3;
+  border-bottom: 1px solid #ead7e3;
+  padding: 9px 10px;
+  text-align: center;
+  white-space: nowrap;
+}
+.dark .availability-matrix th,
+.dark .availability-matrix td {
+  border-color: #3b2c43;
+}
+.availability-matrix thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #fff0f7;
+}
+.dark .availability-matrix thead th {
+  background: #2a2030;
+}
+.availability-matrix tbody th {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  text-align: left;
+  background: #fff7fb;
+}
+.dark .availability-matrix tbody th {
+  background: #211b26;
+}
+.status-cell {
+  font-weight: 700;
+}
+.status-ok { background: #eefcf3; }
+.status-night { background: #eef3ff; }
+.status-day { background: #fff6df; }
+.status-maybe { background: #fffbe8; }
+.status-ng { background: #fff0f0; }
+.status-empty { color: #9a7f91; background: #faf3f8; }
+.dark .status-ok { background: #173220; }
+.dark .status-night { background: #192542; }
+.dark .status-day { background: #392b12; }
+.dark .status-maybe { background: #332e15; }
+.dark .status-ng { background: #3a1b22; }
+.dark .status-empty { background: #211b26; color: #bca8b6; }
+@media(max-width:900px){
+  .summary-row {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+  .summary-row b {
+    grid-column: 1 / -1;
+  }
+}

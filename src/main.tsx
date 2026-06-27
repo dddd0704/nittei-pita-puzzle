@@ -59,6 +59,10 @@ const statusOptions: { value: Status; label: string; title: string }[] = [
   { value: 'ng', label: '❌', title: '無理' },
 ];
 
+const statusLabel: Record<Status, string> = Object.fromEntries(
+  statusOptions.map((status) => [status.value, status.label])
+) as Record<Status, string>;
+
 const preferenceOptions: { value: Pref; label: string }[] = [
   { value: 'weekday', label: '平日を優先したい' },
   { value: 'holiday', label: '土日祝を優先したい' },
@@ -674,6 +678,12 @@ function App() {
             <button className="primary" onClick={joinOrEdit}>参加する / 編集する</button>
           </section>
 
+          <PublicAvailabilitySummary
+            dates={dates}
+            participants={publicParticipants}
+            availability={availability}
+          />
+
           <section className="panel span">
             <h2>予定入力</h2>
             {activeParticipant ? (
@@ -785,6 +795,8 @@ function App() {
             session={session}
             setSession={setSession}
             participants={participants}
+            dates={dates}
+            availability={availability}
             scheduleResult={scheduleResult}
             participantCount={participantCount}
             adminUrl={adminUrl}
@@ -843,7 +855,95 @@ function TextImportBox({
   );
 }
 
-function Admin({ session, setSession, participants, scheduleResult, participantCount, adminUrl, shareUrl, onSave }: any) {
+function PublicAvailabilitySummary({ dates, participants, availability }: {
+  dates: string[];
+  participants: Participant[];
+  availability: AvailabilityMap;
+}) {
+  const countsByDate = dates.map((date) => {
+    const counts: Record<Status, number> = { ok: 0, night: 0, day: 0, maybe: 0, ng: 0 };
+    for (const participant of participants) {
+      const status = availability[participant.id]?.[date];
+      if (status) counts[status] += 1;
+    }
+    return { date, counts };
+  });
+
+  return (
+    <section className="panel span">
+      <h2>みんなの入力状況</h2>
+      <p>登録済み人数：{participants.length}人</p>
+      {participants.length > 0 ? (
+        <>
+          <div className="name-chips">
+            {participants.map((participant) => (
+              <span className="name-chip" key={participant.id}>{participant.name}</span>
+            ))}
+          </div>
+          <div className="summary-list">
+            {countsByDate.map(({ date, counts }) => (
+              <div className="summary-row" key={date}>
+                <b>{displayDate(date)}（{weekday(date)}）</b>
+                <span>⭕️ {counts.ok}</span>
+                <span>🌙 {counts.night}</span>
+                <span>🌞 {counts.day}</span>
+                <span>保留 {counts.maybe}</span>
+                <span>❌ {counts.ng}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : (
+        <p className="muted">まだ参加者は登録されていません。</p>
+      )}
+    </section>
+  );
+}
+
+function AdminAvailabilityMatrix({ dates, participants, availability }: {
+  dates: string[];
+  participants: Participant[];
+  availability: AvailabilityMap;
+}) {
+  return (
+    <section className="panel span">
+      <h2>全員の入力一覧</h2>
+      {participants.length > 0 ? (
+        <div className="matrix-scroll">
+          <table className="availability-matrix">
+            <thead>
+              <tr>
+                <th>日付</th>
+                {participants.map((participant) => (
+                  <th key={participant.id}>{participant.name}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {dates.map((date) => (
+                <tr key={date}>
+                  <th>{displayDate(date)}（{weekday(date)}）</th>
+                  {participants.map((participant) => {
+                    const status = availability[participant.id]?.[date];
+                    return (
+                      <td key={`${date}-${participant.id}`} className={status ? `status-cell status-${status}` : 'status-cell status-empty'}>
+                        {status ? statusLabel[status] : '—'}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="muted">まだ参加者は登録されていません。</p>
+      )}
+    </section>
+  );
+}
+
+function Admin({ session, setSession, participants, dates, availability, scheduleResult, participantCount, adminUrl, shareUrl, onSave }: any) {
   const candidates = scheduleResult.plans || [];
   const medal = ['🥇', '🥈', '🥉'];
 
@@ -914,6 +1014,12 @@ function Admin({ session, setSession, participants, scheduleResult, participantC
         ))}
       </section>
 
+      <AdminAvailabilityMatrix
+        dates={dates}
+        participants={participants}
+        availability={availability}
+      />
+
       <section className="panel span">
         <h2>開催案ランキング</h2>
         {scheduleResult.shortage > 0 && (
@@ -946,7 +1052,7 @@ function Legal() {
       <p>当サイトではサービス提供、アクセス解析、広告配信のためCookie等を利用する場合があります。</p>
       <p>当サイトはGoogle AdSenseおよびAmazonアソシエイトの利用を予定しています。当サイト経由で商品購入等が行われた場合、運営者が紹介料を受け取る場合があります。</p>
       <h3>利用規約</h3>
-      <p>本サービスは日程調整を補助するもので、データ保存や候補計算の完全性を保証しません。保存期間は原則3か月です。</p>
+      <p>本サービスは日程調整を補助するもので、データ保存や候補計算の完全性を保証しません。長期間利用されていないデータは、運営の判断により削除する場合があります。</p>
       <h3>お問い合わせ</h3>
 <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "12px" }}>
 
