@@ -363,23 +363,41 @@ button:focus-visible,
 }
 .day.is-saturday,
 .mobile-day.is-saturday {
-  background: linear-gradient(180deg, rgba(37, 99, 235, 0.055), rgba(255, 255, 255, 0.96));
-  border-color: rgba(37, 99, 235, 0.22);
+  background: linear-gradient(
+    180deg,
+    rgba(37, 99, 235, 0.10),
+    rgba(255, 255, 255, 0.96)
+  );
+  border-color: rgba(37, 99, 235, 0.30);
 }
+
 .day.is-sunday-or-holiday,
 .mobile-day.is-sunday-or-holiday {
-  background: linear-gradient(180deg, rgba(220, 38, 38, 0.055), rgba(255, 255, 255, 0.96));
-  border-color: rgba(220, 38, 38, 0.22);
+  background: linear-gradient(
+    180deg,
+    rgba(220, 38, 38, 0.10),
+    rgba(255, 255, 255, 0.96)
+  );
+  border-color: rgba(220, 38, 38, 0.30);
 }
 .dark .day.is-saturday,
 .dark .mobile-day.is-saturday {
-  background: linear-gradient(180deg, rgba(37, 99, 235, 0.16), #17131a);
-  border-color: rgba(147, 197, 253, 0.26);
+  background: linear-gradient(
+    180deg,
+    rgba(37, 99, 235, 0.22),
+    #17131a
+  );
+  border-color: rgba(147, 197, 253, 0.34);
 }
+
 .dark .day.is-sunday-or-holiday,
 .dark .mobile-day.is-sunday-or-holiday {
-  background: linear-gradient(180deg, rgba(220, 38, 38, 0.16), #17131a);
-  border-color: rgba(252, 165, 165, 0.26);
+  background: linear-gradient(
+    180deg,
+    rgba(220, 38, 38, 0.22),
+    #17131a
+  );
+  border-color: rgba(252, 165, 165, 0.34);
 }
 .calendar-summary {
   display: grid;
