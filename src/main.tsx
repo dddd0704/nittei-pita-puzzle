@@ -789,7 +789,7 @@ function AdBoxes() {
   return (
     <section className="ad-grid">
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2326338968692797"
-     crossorigin="anonymous"></script>
+     crossOrigin="anonymous"></script>
     </section>
   );
 }
