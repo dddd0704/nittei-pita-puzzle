@@ -596,7 +596,6 @@ function App() {
             <button className="primary" onClick={() => setView('create')}>新しく調整ページを作る</button>
           </div>
           <p className="muted">{supabaseReady ? 'Supabase接続中' : 'Supabase未設定：ローカル保存で動作中'}</p>
-          <AdBoxes />
         </main>
       )}
 
@@ -837,7 +836,6 @@ function Admin({ session, setSession, participants, scheduleResult, participantC
           </article>
         )) : <p>条件を満たす候補がまだありません。</p>}
       </section>
-      <AdBoxes />
     </main>
   );
 }
