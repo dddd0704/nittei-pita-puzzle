@@ -629,7 +629,6 @@ function App() {
           <section className="panel">
             <h2>{session.title}</h2>
             <p className="description-text">{session.description}</p>
-            <div className="url-box">
             {publicParticipants.length > 0 && (
               <label>登録済みの名前から編集
                 <select value={activeName} onChange={(e) => selectExistingParticipant(e.target.value)}>
