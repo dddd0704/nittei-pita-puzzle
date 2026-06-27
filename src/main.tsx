@@ -229,6 +229,7 @@ function App() {
   );
   const activeParticipant = participants.find((p) => p.name === activeName);
   const participantCount = participants.filter((p) => p.role === 'participant').length;
+  const publicParticipants = participants.filter((p) => p.role !== 'host');
   const shareUrl = `${location.origin}/s/${session.shareId}`;
   const adminUrl = `${location.origin}/s/${session.shareId}?owner=${session.ownerToken}`;
 
@@ -425,10 +426,13 @@ function App() {
     if (!name) return showNotice('名前を入力してください。');
     if (!session.dbId && supabaseReady) return showNotice('先にページを生成してください。');
 
+    const safeDraft = !isOwner && draft.role === 'host'
+      ? { ...draft, role: 'participant' as Role }
+      : draft;
     const existing = participants.find((p) => p.name === name);
     let nextParticipant: Participant = existing
-      ? { ...existing, ...draft, name }
-      : { id: cryptoRandom(10), ...draft, name };
+      ? { ...existing, ...safeDraft, name }
+      : { id: cryptoRandom(10), ...safeDraft, name };
 
     if (supabaseReady && supabase && session.dbId) {
       const { data, error } = await supabase
@@ -564,6 +568,11 @@ function App() {
     setActiveName(name);
     const found = participants.find((p) => p.name === name);
     if (!found) return;
+    if (found.role === 'host' && !isOwner) {
+      showNotice('主催者情報は参加画面から編集できません。');
+      setActiveName('');
+      return;
+    }
     setDraft({
       name: found.name,
       role: found.role,
@@ -611,13 +620,7 @@ function App() {
             </div>
             <button className="primary" onClick={createPage} disabled={loading}>ページを生成して保存</button>
           </section>
-          <section className="panel">
-            <h2>生成URL</h2>
-            <p>参加URL</p>
-            <code>{shareUrl}</code>
-            <p>管理用URL（主催者だけ保存）</p>
-            <code>{adminUrl}</code>
-          </section>
+
         </main>
       )}
 
@@ -627,25 +630,23 @@ function App() {
             <h2>{session.title}</h2>
             <p className="description-text">{session.description}</p>
             <div className="url-box">
-              <p>参加URL</p>
-              <code>{shareUrl}</code>
-            </div>
-            {participants.length > 0 && (
+            {publicParticipants.length > 0 && (
               <label>登録済みの名前から編集
                 <select value={activeName} onChange={(e) => selectExistingParticipant(e.target.value)}>
                   <option value="">新規入力</option>
-                  {participants.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
+                  {publicParticipants.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
                 </select>
               </label>
             )}
             <h3>参加・編集</h3>
-            <label>名前<input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="同じ名前なら上書き" /></label>
-            <label>役割<select value={draft.role} onChange={(e) => setDraft({ ...draft, role: e.target.value as Role })}>
-              <option value="host">主催</option>
-              <option value="staff">スタッフ</option>
-              <option value="participant">参加者</option>
-            </select></label>
-            <div className="check-grid">
+            <div className="date-row">
+              <label>名前<input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="同じ名前なら上書き" /></label>
+              <label>役割<select value={draft.role === 'host' ? 'participant' : draft.role} onChange={(e) => setDraft({ ...draft, role: e.target.value as Role })}>
+                <option value="participant">参加者</option>
+                <option value="staff">スタッフ</option>
+              </select></label>
+            </div>
+            <div className="check-grid compact">
               {preferenceOptions.map((o) => (
                 <label className="check" key={o.value}>
                   <input
@@ -662,13 +663,15 @@ function App() {
                 </label>
               ))}
             </div>
-            <label>連日開催について<select value={draft.consecutivePreference} onChange={(e) => setDraft({ ...draft, consecutivePreference: e.target.value as ConsecutivePreference })}>
-              <option value="none">気にしない</option>
-              <option value="avoid_2_days">2日連続は避けたい</option>
-              <option value="avoid_3_days">3日連続は避けたい</option>
-              <option value="avoid_any">なるべく避けたい</option>
-            </select></label>
-            <label>補助コメント<textarea value={draft.comment} onChange={(e) => setDraft({ ...draft, comment: e.target.value })} /></label>
+            <div className="date-row">
+              <label>連日開催について<select value={draft.consecutivePreference} onChange={(e) => setDraft({ ...draft, consecutivePreference: e.target.value as ConsecutivePreference })}>
+                <option value="none">気にしない</option>
+                <option value="avoid_2_days">2日連続は避けたい</option>
+                <option value="avoid_3_days">3日連続は避けたい</option>
+                <option value="avoid_any">なるべく避けたい</option>
+              </select></label>
+              <label>補助コメント<textarea value={draft.comment} onChange={(e) => setDraft({ ...draft, comment: e.target.value })} /></label>
+            </div>
             <button className="primary" onClick={joinOrEdit}>参加する / 編集する</button>
           </section>
 
@@ -702,16 +705,94 @@ function App() {
       )}
 
       {view === 'admin' && isOwner && (
-        <Admin
-          session={session}
-          setSession={setSession}
-          participants={participants}
-          scheduleResult={scheduleResult}
-          participantCount={participantCount}
-          adminUrl={adminUrl}
-          shareUrl={shareUrl}
-          onSave={saveSessionSettings}
-        />
+        <>
+          <main className="grid two wide">
+            <section className="panel">
+              <h2>主催者自身の参加登録</h2>
+              <p className="muted">主催者もここで名前・役割・希望条件を登録し、日程を入力できます。</p>
+              {participants.length > 0 && (
+                <label>登録済みの名前から編集
+                  <select value={activeName} onChange={(e) => selectExistingParticipant(e.target.value)}>
+                    <option value="">新規入力</option>
+                    {participants.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
+                  </select>
+                </label>
+              )}
+              <div className="date-row">
+                <label>名前<input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="同じ名前なら上書き" /></label>
+                <label>役割<select value={draft.role} onChange={(e) => setDraft({ ...draft, role: e.target.value as Role })}>
+                  <option value="host">主催</option>
+                  <option value="staff">スタッフ</option>
+                  <option value="participant">参加者</option>
+                </select></label>
+              </div>
+              <div className="check-grid compact">
+                {preferenceOptions.map((o) => (
+                  <label className="check" key={o.value}>
+                    <input
+                      type="checkbox"
+                      checked={draft.preferences.includes(o.value)}
+                      onChange={(e) => setDraft({
+                        ...draft,
+                        preferences: e.target.checked
+                          ? [...draft.preferences, o.value]
+                          : draft.preferences.filter((p) => p !== o.value),
+                      })}
+                    />
+                    {o.label}
+                  </label>
+                ))}
+              </div>
+              <div className="date-row">
+                <label>連日開催について<select value={draft.consecutivePreference} onChange={(e) => setDraft({ ...draft, consecutivePreference: e.target.value as ConsecutivePreference })}>
+                  <option value="none">気にしない</option>
+                  <option value="avoid_2_days">2日連続は避けたい</option>
+                  <option value="avoid_3_days">3日連続は避けたい</option>
+                  <option value="avoid_any">なるべく避けたい</option>
+                </select></label>
+                <label>補助コメント<textarea value={draft.comment} onChange={(e) => setDraft({ ...draft, comment: e.target.value })} /></label>
+              </div>
+              <button className="primary" onClick={joinOrEdit}>参加情報を保存</button>
+            </section>
+
+            <section className="panel span">
+              <h2>主催者の日程入力</h2>
+              {activeParticipant ? (
+                <>
+                  <p><b>{activeParticipant.name}</b> さんの日程を入力中</p>
+                  <div className="bulk">
+                    <button onClick={() => bulk('weekend-ok-weekday-night')}>土日⭕️・平日🌙</button>
+                    <button onClick={() => bulk('all-maybe')}>全日保留</button>
+                    <button onClick={() => bulk('all-ng')}>全日❌</button>
+                    {['日', '月', '火', '水', '木', '金', '土'].map((w, i) => <button key={w} onClick={() => bulk(`weekday-${i}`)}>{w}曜❌</button>)}
+                  </div>
+                  <TextImportBox
+                    text={pasteText}
+                    setText={setPasteText}
+                    extracted={extractedDates}
+                    setExtracted={setExtractedDates}
+                    onExtract={runTextExtract}
+                    onApply={applyExtractedNg}
+                  />
+                  <Calendar dates={dates} value={availability[activeParticipant.id] || {}} onChange={setStatus} />
+                  <button className="primary" onClick={saveActiveSchedule}>日程を保存</button>
+                </>
+              ) : (
+                <p>先に名前を入れて「参加情報を保存」を押してください。</p>
+              )}
+            </section>
+          </main>
+          <Admin
+            session={session}
+            setSession={setSession}
+            participants={participants}
+            scheduleResult={scheduleResult}
+            participantCount={participantCount}
+            adminUrl={adminUrl}
+            shareUrl={shareUrl}
+            onSave={saveSessionSettings}
+          />
+        </>
       )}
 
       {view === 'legal' && <Legal />}
@@ -775,10 +856,28 @@ function Admin({ session, setSession, participants, scheduleResult, participantC
     <main className="grid two">
       <section className="panel">
         <h2>主催設定</h2>
-        <p>参加URL</p>
-        <code>{shareUrl}</code>
-        <p>管理用URL（主催者だけ保存）</p>
-        <code>{adminUrl}</code>
+<p>参加URL</p>
+<code>{shareUrl}</code>
+
+<button
+  onClick={() => navigator.clipboard.writeText(shareUrl)}
+>
+  📋 参加URLをコピー
+</button>
+
+<details style={{ marginTop: 12 }}>
+  <summary>主催者用バックアップ（通常は不要）</summary>
+
+  <p>ブラウザを初期化した場合のみ、このURLから主催権限を復元できます。</p>
+
+  <code>{adminUrl}</code>
+
+  <button
+    onClick={() => navigator.clipboard.writeText(adminUrl)}
+  >
+    📋 管理用URLをコピー
+  </button>
+</details>
         <label>必要コマ数<input type="number" min="1" value={session.requiredSlots} onChange={(e) => patchSession({ requiredSlots: Number(e.target.value) })} /></label>
         <label>最低参加者人数<select value={session.minParticipantsMode} onChange={(e) => patchSession({ minParticipantsMode: e.target.value as MinMode })}>
           <option value="all">全員</option>
@@ -850,28 +949,37 @@ function Legal() {
       <h3>利用規約</h3>
       <p>本サービスは日程調整を補助するもので、データ保存や候補計算の完全性を保証しません。保存期間は原則3か月です。</p>
       <h3>お問い合わせ</h3>
-            <a
-  href="https://cur1um.booth.pm/"
-  target="_blank"
-  rel="noopener noreferrer"
->
-  開発者booth
-</a>
-<br />
-<a
-  href="https://x.com/tooshobt"
-  target="_blank"
-  rel="noopener noreferrer"
->
-  開発者X
-</a>
-      <h3>ご支援お願いします！</h3>
+<div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "12px" }}>
+
+  <a
+    href="https://cur1um.booth.pm/"
+    target="_blank"
+    rel="noopener noreferrer"
+    className="link-button"
+  >
+    📦 開発者BOOTH
+  </a>
+
+  <a
+    href="https://x.com/tooshobt"
+    target="_blank"
+    rel="noopener noreferrer"
+    className="link-button"
+  >
+    🐦 開発者X
+  </a>
+
+</div>
+
+<h3>ご支援お願いします！</h3>
+
 <a
   href="https://www.amazon.jp/hz/wishlist/ls/SIRICYBV5ACF?ref_=wl_share"
   target="_blank"
   rel="noopener noreferrer"
+  className="link-button support"
 >
-  ほしいものリスト
+  🎁 ほしいものリスト
 </a>
     </main>
   );
