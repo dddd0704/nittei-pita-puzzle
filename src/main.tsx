@@ -5,6 +5,7 @@ import { extractDatesFromText, type ExtractedDate } from './logic/textParser';
 import { calculateScheduleResult } from './logic/scheduler';
 import { supabase, supabaseReady } from './lib/supabaseClient';
 import { datesBetween, displayDate, isWeekend, weekday, weekdayIndex } from './utils/dateUtils';
+import { getHolidayName } from './utils/holidays';
 import './styles.css';
 
 type Status = 'ok' | 'night' | 'day' | 'maybe' | 'ng';
@@ -88,6 +89,23 @@ const consecutiveLabel: Record<ConsecutivePreference, string> = {
   avoid_3_days: '3日連続は避けたい',
   avoid_any: 'なるべく避けたい',
 };
+
+
+function dateToneClass(date: string) {
+  const day = new Date(`${date}T00:00:00`).getDay();
+  const holiday = getHolidayName(date);
+  if (day === 6) return 'date-saturday';
+  if (day === 0 || holiday) return 'date-sunday-or-holiday';
+  return '';
+}
+
+function DateWithWeekday({ date }: { date: string }) {
+  return (
+    <>
+      {displayDate(date)}（<span className={dateToneClass(date)}>{weekday(date)}</span>）
+    </>
+  );
+}
 
 function cryptoRandom(length: number) {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
@@ -1080,7 +1098,7 @@ function AdminAvailabilityMatrix({ dates, participants, availability }: {
             <tbody>
               {dates.map((date) => (
                 <tr key={date}>
-                  <th>{displayDate(date)}（{weekday(date)}）</th>
+                  <th className={dateToneClass(date)}><DateWithWeekday date={date} /></th>
                   {participants.map((participant) => {
                     const status = availability[participant.id]?.[date];
                     return (
@@ -1203,7 +1221,7 @@ function Admin({ session, setSession, participants, dates, availability, schedul
           <article className="candidate" key={plan.label}>
             <h3>{medal[index] || '候補'} 第{index + 1}案{plan.complete ? '' : '（不足あり）'}</h3>
             <div className="slot-list">
-              {plan.slots.map((c: any) => <p key={c.date + c.part}>{displayDate(c.date)}（{weekday(c.date)}）{c.part}</p>)}
+              {plan.slots.map((c: any) => <p key={c.date + c.part} className={dateToneClass(c.date)}><DateWithWeekday date={c.date} />{c.part}</p>)}
             </div>
             <p><b>理由：</b>{plan.reasons.slice(0, 4).join(' / ') || '条件を満たす候補です'}</p>
             {plan.warnings.length > 0 && <p><b>気になる点：</b>{plan.warnings.slice(0, 4).join(' / ')}</p>}

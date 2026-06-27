@@ -17,11 +17,11 @@ export type Status =
     | "ng";
 
 const statusOptions = [
-    { value: "ok", label: "⭕️" },
-    { value: "night", label: "🌙" },
-    { value: "day", label: "🌞" },
-    { value: "maybe", label: "保留" },
-    { value: "ng", label: "❌" },
+    { value: "ok", label: "⭕️", summaryLabel: "⭕" },
+    { value: "night", label: "🌙", summaryLabel: "🌙" },
+    { value: "day", label: "🌞", summaryLabel: "🌞" },
+    { value: "maybe", label: "保留", summaryLabel: "?" },
+    { value: "ng", label: "❌", summaryLabel: "×" },
 ] as const;
 
 type SummaryCounts = Partial<Record<Status, number>>;
@@ -59,7 +59,7 @@ function AvailabilitySummary({ counts }: { counts?: SummaryCounts }) {
             <div className="calendar-summary-icons" aria-hidden="true">
                 {statusOptions.map((option) => (
                     <span key={option.value} className={`calendar-summary-icon summary-${option.value}`}>
-                        {option.label === "保留" ? "❔" : option.label}
+                        {option.summaryLabel}
                     </span>
                 ))}
             </div>
