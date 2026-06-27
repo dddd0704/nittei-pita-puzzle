@@ -93,20 +93,53 @@ function cryptoRandom(length: number) {
 
 function normalizePath() {
   const parts = location.pathname.split('/').filter(Boolean);
-  if (parts[0] === 's' && parts[1]) return { view: 'join' as View, shareId: parts[1], ownerToken: '' };
-  if (parts[0] === 'admin' && parts[1]) return { view: 'admin' as View, shareId: '', ownerToken: parts[1] };
-  return { view: 'top' as View, shareId: '', ownerToken: '' };
+  const params = new URLSearchParams(location.search);
+  const queryId = params.get('id') || '';
+  const queryOwner = params.get('owner') || '';
+
+  if (parts[0] === 's' && parts[1]) return { view: 'join' as View, shareId: parts[1], ownerToken: queryOwner };
+  if (parts[0] === 'admin' && parts[1]) return { view: 'admin' as View, shareId: queryId, ownerToken: parts[1] };
+  if (queryId) return { view: 'join' as View, shareId: queryId, ownerToken: queryOwner };
+  return { view: 'top' as View, shareId: '', ownerToken: queryOwner };
 }
 
 function localKey(shareId: string) {
   return `pita-puzzle:${shareId}`;
 }
 
+function ownerLocalKey(shareId: string) {
+  return `nittei-owner-${shareId}`;
+}
+
+function getStoredOwnerToken(shareId: string) {
+  return shareId ? localStorage.getItem(ownerLocalKey(shareId)) || '' : '';
+}
+
+function rememberOwnerToken(shareId: string, ownerToken: string) {
+  if (!shareId || !ownerToken) return;
+  localStorage.setItem(ownerLocalKey(shareId), ownerToken);
+}
+
+function cleanOwnerFromUrl(shareId: string) {
+  if (!location.search.includes('owner=')) return;
+  history.replaceState(null, '', `/s/${shareId}`);
+}
+const today = new Date();
+
+// 明日
+const defaultStart = new Date(today);
+defaultStart.setDate(defaultStart.getDate() + 1);
+
+// 翌月末
+const defaultEnd = new Date(today.getFullYear(), today.getMonth() + 2, 0);
+
+const formatDate = (d: Date) =>
+  d.toISOString().slice(0, 10);
 const initialSession: SessionSettings = {
-  title: '日程調整',
+  title: '〇〇日程調整',
   description: '候補期間に参加できる日程を入力してください。',
-  startDate: '2026-07-01',
-  endDate: '2026-07-31',
+  startDate: formatDate(defaultStart),
+  endDate: formatDate(defaultEnd),
   requiredSlots: 4,
   minParticipantsMode: 'all',
   minParticipantsCount: 3,
@@ -186,6 +219,7 @@ function App() {
   const [activeName, setActiveName] = useState('');
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
   const [pasteText, setPasteText] = useState('');
   const [extractedDates, setExtractedDates] = useState<ExtractedDate[]>([]);
 
@@ -196,7 +230,7 @@ function App() {
   const activeParticipant = participants.find((p) => p.name === activeName);
   const participantCount = participants.filter((p) => p.role === 'participant').length;
   const shareUrl = `${location.origin}/s/${session.shareId}`;
-  const adminUrl = `${location.origin}/admin/${session.ownerToken}`;
+  const adminUrl = `${location.origin}/s/${session.shareId}?owner=${session.ownerToken}`;
 
   const scheduleResult = useMemo(
     () => calculateScheduleResult(dates, participants, availability, session),
@@ -271,21 +305,43 @@ function App() {
           }
         }
 
+        const storedOwnerToken = getStoredOwnerToken(loadedSession.shareId);
+        const routeOwnerToken = route.ownerToken || '';
+        const ownerMatched = Boolean(
+          loadedSession.ownerToken &&
+          (storedOwnerToken === loadedSession.ownerToken || routeOwnerToken === loadedSession.ownerToken)
+        );
+
+        if (ownerMatched) {
+          rememberOwnerToken(loadedSession.shareId, loadedSession.ownerToken);
+          cleanOwnerFromUrl(loadedSession.shareId);
+        }
+
         setSession(loadedSession);
         setParticipants(loadedParticipants);
         setAvailability(loadedAvailability);
-        setView(route.shareId ? 'join' : 'admin');
-        showNotice(route.shareId ? '参加ページを読み込みました。' : '主催ページを読み込みました。');
+        setIsOwner(ownerMatched);
+        setView(ownerMatched ? 'admin' : 'join');
+        showNotice(ownerMatched ? '主催ページを読み込みました。' : '参加ページを読み込みました。');
         return;
       }
 
       const raw = route.shareId ? localStorage.getItem(localKey(route.shareId)) : null;
       if (raw) {
         const bundle = JSON.parse(raw) as LocalBundle;
+        const ownerMatched = Boolean(
+          bundle.session.ownerToken &&
+          (getStoredOwnerToken(bundle.session.shareId) === bundle.session.ownerToken || route.ownerToken === bundle.session.ownerToken)
+        );
+        if (ownerMatched) {
+          rememberOwnerToken(bundle.session.shareId, bundle.session.ownerToken);
+          cleanOwnerFromUrl(bundle.session.shareId);
+        }
         setSession(bundle.session);
         setParticipants(bundle.participants || []);
         setAvailability(bundle.availability || {});
-        setView(route.shareId ? 'join' : 'admin');
+        setIsOwner(ownerMatched);
+        setView(ownerMatched ? 'admin' : 'join');
         showNotice('ローカル保存データを読み込みました。');
       } else {
         showNotice('Supabase未設定のため、URL読み込みはこのブラウザのローカル保存のみ対応です。');
@@ -321,18 +377,22 @@ function App() {
         }
 
         const saved = { ...next, dbId: data.id };
+        rememberOwnerToken(saved.shareId, saved.ownerToken);
+        setIsOwner(true);
         setSession(saved);
         saveLocal({ session: saved });
         history.pushState(null, '', `/s/${saved.shareId}`);
-        setView('join');
+        setView('admin');
         showNotice('保存しました。参加URLを共有できます。');
         return;
       }
 
+      rememberOwnerToken(next.shareId, next.ownerToken);
+      setIsOwner(true);
       setSession(next);
       saveLocal({ session: next });
       history.pushState(null, '', `/s/${next.shareId}`);
-      setView('join');
+      setView('admin');
       showNotice('保存しました。Supabase未設定なのでローカル保存です。');
     } finally {
       setLoading(false);
@@ -519,7 +579,7 @@ function App() {
         <button className="brand" onClick={() => { history.pushState(null, '', '/'); setView('top'); }}>日程ぴたパズル</button>
         <nav>
           <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>{theme === 'light' ? '🌙' : '🌞'} 表示切替</button>
-          <button onClick={() => setFontSize(fontSize === 'normal' ? 'large' : 'normal')}>{fontSize === 'normal' ? '文字を大きめ' : '標準サイズ'}</button>
+          <button onClick={() => setFontSize(fontSize === 'normal' ? 'large' : 'normal')}>{fontSize === 'normal' ? '文字を大きく' : '標準サイズ'}</button>
           <button onClick={() => setView('legal')}>運営・規約</button>
         </nav>
       </header>
@@ -529,13 +589,11 @@ function App() {
 
       {view === 'top' && (
         <main className="hero">
-          <p className="eyebrow">Version 1.0.10</p>
+          <p className="eyebrow">Version 1.0.11</p>
           <h1>条件から、開催案を組み立てる。</h1>
           <p>複数人の日程を入力し、必要コマ数・参加人数・希望条件から候補案を提案します。</p>
           <div className="actions">
             <button className="primary" onClick={() => setView('create')}>新しく調整ページを作る</button>
-            <button onClick={() => setView('join')}>参加URLから参加する</button>
-            <button onClick={() => setView('admin')}>主催画面</button>
           </div>
           <p className="muted">{supabaseReady ? 'Supabase接続中' : 'Supabase未設定：ローカル保存で動作中'}</p>
           <AdBoxes />
@@ -558,7 +616,7 @@ function App() {
             <h2>生成URL</h2>
             <p>参加URL</p>
             <code>{shareUrl}</code>
-            <p>主催URL</p>
+            <p>管理用URL（主催者だけ保存）</p>
             <code>{adminUrl}</code>
           </section>
         </main>
@@ -644,7 +702,7 @@ function App() {
         </main>
       )}
 
-      {view === 'admin' && (
+      {view === 'admin' && isOwner && (
         <Admin
           session={session}
           setSession={setSession}
@@ -660,9 +718,8 @@ function App() {
       {view === 'legal' && <Legal />}
 
       <footer>
-        <button onClick={() => setView('admin')}>主催画面</button>
-        <button onClick={() => setView('join')}>参加画面</button>
-        <span>日程ぴたパズル Version 1.0.10</span>
+        <a href="https://x.com/tooshobt" target="_blank" rel="noopener noreferrer">お問い合わせ</a>
+        <span>日程ぴたパズル Version 1.0.11</span>
       </footer>
     </div>
   );
@@ -721,7 +778,7 @@ function Admin({ session, setSession, participants, scheduleResult, participantC
         <h2>主催設定</h2>
         <p>参加URL</p>
         <code>{shareUrl}</code>
-        <p>主催URL</p>
+        <p>管理用URL（主催者だけ保存）</p>
         <code>{adminUrl}</code>
         <label>必要コマ数<input type="number" min="1" value={session.requiredSlots} onChange={(e) => patchSession({ requiredSlots: Number(e.target.value) })} /></label>
         <label>最低参加者人数<select value={session.minParticipantsMode} onChange={(e) => patchSession({ minParticipantsMode: e.target.value as MinMode })}>
@@ -785,15 +842,6 @@ function Admin({ session, setSession, participants, scheduleResult, participantC
   );
 }
 
-function AdBoxes() {
-  return (
-    <section className="ad-grid">
-<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2326338968692797"
-     crossOrigin="anonymous"></script>
-    </section>
-  );
-}
-
 function Legal() {
   return (
     <main className="panel legal">
@@ -804,10 +852,29 @@ function Legal() {
       <h3>利用規約</h3>
       <p>本サービスは日程調整を補助するもので、データ保存や候補計算の完全性を保証しません。保存期間は原則3か月です。</p>
       <h3>お問い合わせ</h3>
-      <p>https://cur1um.booth.pm/</p>
-      <p>https://x.com/tooshobt</p>
-      <h3>ほしいものリスト</h3>
-      <p>https://www.amazon.jp/hz/wishlist/ls/SIRICYBV5ACF?ref_=wl_share</p>
+            <a
+  href="https://cur1um.booth.pm/"
+  target="_blank"
+  rel="noopener noreferrer"
+>
+  開発者booth
+</a>
+<br />
+<a
+  href="https://x.com/tooshobt"
+  target="_blank"
+  rel="noopener noreferrer"
+>
+  開発者X
+</a>
+      <h3>ご支援お願いします！</h3>
+<a
+  href="https://www.amazon.jp/hz/wishlist/ls/SIRICYBV5ACF?ref_=wl_share"
+  target="_blank"
+  rel="noopener noreferrer"
+>
+  ほしいものリスト
+</a>
     </main>
   );
 }
