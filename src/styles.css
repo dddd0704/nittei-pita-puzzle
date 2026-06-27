@@ -426,3 +426,69 @@ button:focus-visible,
     max-width: 220px;
   }
 }
+
+.person-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+button.danger,
+.danger {
+  border-color: rgba(220, 38, 38, 0.28);
+  background: rgba(220, 38, 38, 0.10);
+  color: #b91c1c;
+}
+
+.dark button.danger,
+.dark .danger {
+  border-color: rgba(248, 113, 113, 0.35);
+  background: rgba(248, 113, 113, 0.12);
+  color: #fecaca;
+}
+
+button.small,
+.small {
+  padding: 6px 10px;
+  font-size: 0.85rem;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+
+/* v1.0.19: 参加画面の入力フォームを主催画面寄せでコンパクト化 */
+.join-grid {
+  grid-template-columns: 1fr;
+}
+.join-entry-panel {
+  align-self: start;
+}
+.join-entry-panel .date-row {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  align-items: end;
+}
+.join-entry-panel label {
+  margin: 8px 0;
+}
+.join-entry-panel textarea {
+  min-height: 58px;
+}
+.join-entry-panel .check-grid.compact {
+  margin: 8px 0 12px;
+}
+.join-entry-panel .check-grid.compact .check {
+  min-width: 140px;
+  padding: 8px 11px;
+}
+.join-entry-panel .primary {
+  margin-top: 8px;
+}
+@media (max-width: 900px) {
+  .join-entry-panel .date-row {
+    grid-template-columns: 1fr;
+  }
+  .join-entry-panel .check-grid.compact .check {
+    flex: 1 1 150px;
+  }
+}

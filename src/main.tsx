@@ -20,6 +20,7 @@ type View = 'top' | 'create' | 'join' | 'admin' | 'legal';
 type Participant = {
   id: string;
   dbId?: string;
+  participantToken?: string;
   name: string;
   role: Role;
   preferences: Pref[];
@@ -64,10 +65,10 @@ const statusLabel: Record<Status, string> = Object.fromEntries(
 ) as Record<Status, string>;
 
 const preferenceOptions: { value: Pref; label: string }[] = [
-  { value: 'weekday', label: '平日を優先したい' },
-  { value: 'holiday', label: '土日祝を優先したい' },
-  { value: 'day', label: '昼開催を優先したい' },
-  { value: 'night', label: '夜開催を優先したい' },
+  { value: 'weekday', label: '平日を優先' },
+  { value: 'holiday', label: '土日祝を優先' },
+  { value: 'day', label: '昼開催を優先' },
+  { value: 'night', label: '夜開催を優先' },
   { value: 'avoid_holiday_day', label: '土日祝の昼は避けたい' },
 ];
 
@@ -115,13 +116,26 @@ function ownerLocalKey(shareId: string) {
   return `nittei-owner-${shareId}`;
 }
 
+function participantLocalKey(shareId: string) {
+  return `nittei-participant-${shareId}`;
+}
+
 function getStoredOwnerToken(shareId: string) {
   return shareId ? localStorage.getItem(ownerLocalKey(shareId)) || '' : '';
+}
+
+function getStoredParticipantToken(shareId: string) {
+  return shareId ? localStorage.getItem(participantLocalKey(shareId)) || '' : '';
 }
 
 function rememberOwnerToken(shareId: string, ownerToken: string) {
   if (!shareId || !ownerToken) return;
   localStorage.setItem(ownerLocalKey(shareId), ownerToken);
+}
+
+function rememberParticipantToken(shareId: string, participantToken: string) {
+  if (!shareId || !participantToken) return;
+  localStorage.setItem(participantLocalKey(shareId), participantToken);
 }
 
 function cleanOwnerFromUrl(shareId: string) {
@@ -193,6 +207,7 @@ function rowToParticipant(row: any): Participant {
   return {
     id: row.id,
     dbId: row.id,
+    participantToken: row.participant_token || '',
     name: row.name || '',
     role: row.role || 'participant',
     preferences: Array.isArray(row.preferences) ? row.preferences : [],
@@ -234,7 +249,6 @@ function App() {
   );
   const activeParticipant = participants.find((p) => p.name === activeName);
   const participantCount = participants.filter((p) => p.role === 'participant').length;
-  const publicParticipants = participants.filter((p) => p.role !== 'host');
   const shareUrl = `${location.origin}/s/${session.shareId}`;
   const adminUrl = `${location.origin}/s/${session.shareId}?owner=${session.ownerToken}`;
 
@@ -257,6 +271,47 @@ function App() {
 
     return summary;
   }, [dates, participants, availability]);
+
+  function draftFromParticipant(participant: Participant): Omit<Participant, 'id'> {
+    return {
+      dbId: participant.dbId,
+      participantToken: participant.participantToken,
+      name: participant.name,
+      role: participant.role,
+      preferences: participant.preferences,
+      consecutivePreference: participant.consecutivePreference,
+      comment: participant.comment,
+    };
+  }
+
+  function blankParticipantDraft(): Omit<Participant, 'id'> {
+    return {
+      name: '',
+      role: 'participant',
+      preferences: [],
+      consecutivePreference: 'none',
+      comment: '',
+    };
+  }
+
+  function findParticipantOwnedByThisBrowser(list: Participant[], shareId: string) {
+    const token = getStoredParticipantToken(shareId);
+    if (!token) return undefined;
+    return list.find((participant) => participant.participantToken === token);
+  }
+
+  function activateParticipantForJoin(list: Participant[], shareId: string) {
+    const owned = findParticipantOwnedByThisBrowser(list, shareId);
+    if (!owned) {
+      setActiveName('');
+      setDraft(blankParticipantDraft());
+      return false;
+    }
+
+    setActiveName(owned.name);
+    setDraft(draftFromParticipant(owned));
+    return true;
+  }
 
   function showNotice(message: string) {
     setNotice(message);
@@ -354,8 +409,13 @@ function App() {
         setParticipants(loadedParticipants);
         setAvailability(loadedAvailability);
         setIsOwner(ownerMatched);
+        if (!ownerMatched) {
+          const restored = activateParticipantForJoin(loadedParticipants, loadedSession.shareId);
+          if (restored) showNotice('このブラウザの前回入力を読み込みました。');
+        }
         setView(ownerMatched ? 'admin' : 'join');
-        showNotice(ownerMatched ? '主催ページを読み込みました。' : '参加ページを読み込みました。');
+        if (ownerMatched) showNotice('主催ページを読み込みました。');
+        if (!ownerMatched && !findParticipantOwnedByThisBrowser(loadedParticipants, loadedSession.shareId)) showNotice('参加ページを読み込みました。');
         return;
       }
 
@@ -370,10 +430,12 @@ function App() {
           rememberOwnerToken(bundle.session.shareId, bundle.session.ownerToken);
           cleanOwnerFromUrl(bundle.session.shareId);
         }
+        const localParticipants = bundle.participants || [];
         setSession(bundle.session);
-        setParticipants(bundle.participants || []);
+        setParticipants(localParticipants);
         setAvailability(bundle.availability || {});
         setIsOwner(ownerMatched);
+        if (!ownerMatched) activateParticipantForJoin(localParticipants, bundle.session.shareId);
         setView(ownerMatched ? 'admin' : 'join');
         showNotice('ローカル保存データを読み込みました。');
       } else {
@@ -463,64 +525,82 @@ function App() {
   async function joinOrEdit() {
     setSavingAction('join');
     try {
+      const name = draft.name.trim();
+      if (!name) return showNotice('名前を入力してください。');
+      if (!session.dbId && supabaseReady) return showNotice('先にページを生成してください。');
 
-        const name = draft.name.trim();
-        if (!name) return showNotice('名前を入力してください。');
-        if (!session.dbId && supabaseReady) return showNotice('先にページを生成してください。');
+      const safeDraft = !isOwner && draft.role === 'host'
+        ? { ...draft, role: 'participant' as Role }
+        : draft;
 
-        const safeDraft = !isOwner && draft.role === 'host'
-          ? { ...draft, role: 'participant' as Role }
-          : draft;
-        const existing = participants.find((p) => p.name === name);
-        let nextParticipant: Participant = existing
-          ? { ...existing, ...safeDraft, name }
-          : { id: cryptoRandom(10), ...safeDraft, name };
+      const storedParticipantToken = getStoredParticipantToken(session.shareId);
+      const existingByName = participants.find((p) => p.name === name);
+      const existingByToken = storedParticipantToken
+        ? participants.find((p) => p.participantToken === storedParticipantToken)
+        : undefined;
 
-        if (supabaseReady && supabase && session.dbId) {
-          const { data, error } = await supabase
-            .from('participants')
-            .upsert(
-              {
-                session_id: session.dbId,
-                name,
-                role: nextParticipant.role,
-                preferences: nextParticipant.preferences,
-                consecutive_preference: nextParticipant.consecutivePreference,
-                comment: nextParticipant.comment,
-              },
-              { onConflict: 'session_id,name' }
-            )
-            .select()
-            .single();
+      if (!isOwner && existingByName && existingByName.id !== existingByToken?.id) {
+        showNotice('同じ名前は既に登録されています。このブラウザでは他の人の入力は編集できません。');
+        return;
+      }
 
-          if (error) {
-            showNotice(`参加者保存エラー: ${error.message}`);
-            return;
-          }
+      const existing = isOwner ? existingByName : (existingByToken || existingByName);
+      const participantToken = existing?.participantToken || (!isOwner && storedParticipantToken ? storedParticipantToken : cryptoRandom(18));
+      let nextParticipant: Participant = existing
+        ? { ...existing, ...safeDraft, name, participantToken }
+        : { id: cryptoRandom(10), ...safeDraft, name, participantToken };
 
-          const dbParticipant = rowToParticipant(data);
-          const oldId = existing?.id;
-          nextParticipant = dbParticipant;
+      if (supabaseReady && supabase && session.dbId) {
+        const row = {
+          session_id: session.dbId,
+          name,
+          role: nextParticipant.role,
+          preferences: nextParticipant.preferences,
+          consecutive_preference: nextParticipant.consecutivePreference,
+          comment: nextParticipant.comment,
+          participant_token: participantToken,
+        };
 
-          if (oldId && oldId !== dbParticipant.id && availability[oldId]) {
-            setAvailability((prev) => {
-              const next = { ...prev, [dbParticipant.id]: prev[oldId] };
-              delete next[oldId];
-              return next;
-            });
-          }
+        const request = existing?.dbId
+          ? supabase.from('participants').update(row).eq('id', existing.dbId).select().single()
+          : supabase.from('participants').insert(row).select().single();
+
+        const { data, error } = await request;
+
+        if (error) {
+          const duplicate = String(error.message || '').includes('duplicate') || String(error.code || '') === '23505';
+          showNotice(duplicate ? '同じ名前は既に登録されています。別の名前で登録してください。' : `参加者保存エラー: ${error.message}`);
+          return;
         }
 
-        setParticipants((prev) => {
-          const next = existing
-            ? prev.map((p) => (p.name === name ? nextParticipant : p))
-            : [...prev, nextParticipant];
-          saveLocal({ participants: next });
-          return next;
-        });
-        setActiveName(name);
-        showNotice(existing ? '同じ名前の入力を上書きしました。' : '参加者を登録しました。');
-      } finally {
+        const dbParticipant = rowToParticipant(data);
+        const oldId = existing?.id;
+        nextParticipant = dbParticipant;
+
+        if (!isOwner) rememberParticipantToken(session.shareId, dbParticipant.participantToken || participantToken);
+
+        if (oldId && oldId !== dbParticipant.id && availability[oldId]) {
+          setAvailability((prev) => {
+            const next = { ...prev, [dbParticipant.id]: prev[oldId] };
+            delete next[oldId];
+            return next;
+          });
+        }
+      } else if (!isOwner) {
+        rememberParticipantToken(session.shareId, participantToken);
+      }
+
+      setParticipants((prev) => {
+        const next = existing
+          ? prev.map((p) => (p.id === existing.id ? nextParticipant : p))
+          : [...prev, nextParticipant];
+        saveLocal({ participants: next });
+        return next;
+      });
+      setActiveName(name);
+      setDraft(draftFromParticipant(nextParticipant));
+      showNotice(existing ? '参加情報を更新しました。' : '参加者を登録しました。');
+    } finally {
       setSavingAction('');
     }
   }
@@ -603,6 +683,54 @@ function App() {
     }
   }
 
+
+  async function deleteParticipant(participant: Participant) {
+    if (!isOwner) return showNotice('主催者だけが参加者を削除できます。');
+    const ok = window.confirm(`${participant.name}さんを削除します。入力済みの日程も削除されます。`);
+    if (!ok) return;
+
+    const actionKey = `delete-${participant.id}`;
+    setSavingAction(actionKey);
+
+    try {
+      if (supabaseReady && supabase && participant.dbId && session.dbId) {
+        const { error } = await supabase.rpc('delete_participant_as_owner', {
+          target_session_id: session.dbId,
+          target_participant_id: participant.dbId,
+          input_owner_token: session.ownerToken,
+        });
+
+        if (error) {
+          showNotice(`参加者削除エラー: ${error.message}`);
+          return;
+        }
+      }
+
+      const nextParticipants = participants.filter((p) => p.id !== participant.id);
+      const nextAvailability = { ...availability };
+      delete nextAvailability[participant.id];
+
+      setParticipants(nextParticipants);
+      setAvailability(nextAvailability);
+
+      if (activeName === participant.name) {
+        setActiveName('');
+        setDraft({
+          name: '',
+          role: 'participant',
+          preferences: [],
+          consecutivePreference: 'none',
+          comment: '',
+        });
+      }
+
+      saveLocal({ participants: nextParticipants, availability: nextAvailability });
+      showNotice(`${participant.name}さんを削除しました。`);
+    } finally {
+      setSavingAction('');
+    }
+  }
+
   function runTextExtract() {
     const extracted = extractDatesFromText(pasteText, session.startDate, session.endDate);
     setExtractedDates(extracted);
@@ -638,6 +766,8 @@ function App() {
       return;
     }
     setDraft({
+      dbId: found.dbId,
+      participantToken: found.participantToken,
       name: found.name,
       role: found.role,
       preferences: found.preferences,
@@ -663,7 +793,7 @@ function App() {
       {view === 'top' && (
         <main className="hero">
           <p className="eyebrow">Version 1.0.16</p>
-          <h1>条件から、開催案を組み立てる。</h1>
+          <h1>条件から、自動で開催案を組み立てる。</h1>
           <p>複数人の日程を入力し、必要コマ数・参加人数・希望条件から候補案を提案します。</p>
           <div className="actions">
             <button className="primary" onClick={() => setView('create')}>新しく調整ページを作る</button>
@@ -689,17 +819,14 @@ function App() {
       )}
 
       {view === 'join' && (
-        <main className="grid two wide">
-          <section className="panel">
+        <main className="grid join-grid">
+          <section className="panel join-entry-panel">
             <h2>{session.title}</h2>
             <p className="description-text">{session.description}</p>
-            {publicParticipants.length > 0 && (
-              <label>登録済みの名前から編集
-                <select value={activeName} onChange={(e) => selectExistingParticipant(e.target.value)}>
-                  <option value="">新規入力</option>
-                  {publicParticipants.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
-                </select>
-              </label>
+            {activeParticipant ? (
+              <p className="muted">このブラウザの前回入力を編集中です。</p>
+            ) : (
+              <p className="muted">同じブラウザなら前回入力を自動で編集できます。他の人の入力は編集できません。</p>
             )}
             <h3>参加・編集</h3>
             <div className="date-row">
@@ -875,6 +1002,7 @@ function App() {
             onSave={saveSessionSettings}
             savingAction={savingAction}
             copyToClipboard={copyToClipboard}
+            onDeleteParticipant={deleteParticipant}
           />
         </>
       )}
@@ -973,7 +1101,7 @@ function AdminAvailabilityMatrix({ dates, participants, availability }: {
   );
 }
 
-function Admin({ session, setSession, participants, dates, availability, scheduleResult, participantCount, adminUrl, shareUrl, onSave, savingAction, copyToClipboard }: any) {
+function Admin({ session, setSession, participants, dates, availability, scheduleResult, participantCount, adminUrl, shareUrl, onSave, savingAction, copyToClipboard, onDeleteParticipant }: any) {
   const candidates = scheduleResult.plans || [];
   const medal = ['🥇', '🥈', '🥉'];
 
@@ -1038,7 +1166,18 @@ function Admin({ session, setSession, participants, dates, availability, schedul
         <p>参加者{participantCount}人参加可能</p>
         {participants.map((p: Participant) => (
           <article className="person" key={p.id}>
-            <b>{p.name}</b><span>{roleLabel[p.role]}</span>
+            <div className="person-head">
+              <div>
+                <b>{p.name}</b><span>{roleLabel[p.role]}</span>
+              </div>
+              <button
+                className="danger small"
+                onClick={() => onDeleteParticipant(p)}
+                disabled={savingAction === `delete-${p.id}`}
+              >
+                {savingAction === `delete-${p.id}` ? '削除中...' : '削除'}
+              </button>
+            </div>
             <p>{p.preferences.map((pref) => prefLabel[pref]).join(' / ') || '希望条件なし'}</p>
             <p>{consecutiveLabel[p.consecutivePreference]}</p>
             <p>{p.comment || 'コメントなし'}</p>
