@@ -223,6 +223,7 @@ function App() {
   const [activeName, setActiveName] = useState('');
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
+  const [savingAction, setSavingAction] = useState('');
   const [isOwner, setIsOwner] = useState(false);
   const [pasteText, setPasteText] = useState('');
   const [extractedDates, setExtractedDates] = useState<ExtractedDate[]>([]);
@@ -242,9 +243,24 @@ function App() {
     [dates, participants, availability, session]
   );
 
+  const availabilitySummary = useMemo(() => {
+    const summary: Record<string, Record<Status, number>> = {};
+
+    for (const date of dates) {
+      summary[date] = { ok: 0, night: 0, day: 0, maybe: 0, ng: 0 };
+
+      for (const participant of participants) {
+        const status = availability[participant.id]?.[date];
+        if (status) summary[date][status] += 1;
+      }
+    }
+
+    return summary;
+  }, [dates, participants, availability]);
+
   function showNotice(message: string) {
     setNotice(message);
-    window.setTimeout(() => setNotice((current) => (current === message ? '' : current)), 2600);
+    window.setTimeout(() => setNotice((current) => (current === message ? '' : current)), 3200);
   }
 
   function saveLocal(bundle?: Partial<LocalBundle>) {
@@ -254,6 +270,18 @@ function App() {
       availability: bundle?.availability || availability,
     };
     localStorage.setItem(localKey(next.session.shareId), JSON.stringify(next));
+  }
+
+  async function copyToClipboard(text: string, label: string, actionKey: string) {
+    setSavingAction(actionKey);
+    try {
+      await navigator.clipboard.writeText(text);
+      showNotice(`${label}をコピーしました。`);
+    } catch {
+      showNotice('コピーできませんでした。URLを選択してコピーしてください。');
+    } finally {
+      window.setTimeout(() => setSavingAction((current) => (current === actionKey ? '' : current)), 700);
+    }
   }
 
   async function loadSessionByRoute() {
@@ -367,6 +395,7 @@ function App() {
       ownerToken: cryptoRandom(18),
     };
     setLoading(true);
+    setSavingAction('create');
 
     try {
       if (supabaseReady && supabase) {
@@ -401,87 +430,99 @@ function App() {
       showNotice('保存しました。Supabase未設定なのでローカル保存です。');
     } finally {
       setLoading(false);
+      setSavingAction('');
     }
   }
 
   async function saveSessionSettings(nextSession = session) {
+    setSavingAction('settings');
     setSession(nextSession);
 
-    if (supabaseReady && supabase && nextSession.dbId) {
-      const { error } = await supabase
-        .from('sessions')
-        .update(sessionToRow(nextSession))
-        .eq('id', nextSession.dbId);
+    try {
+      if (supabaseReady && supabase && nextSession.dbId) {
+        const { error } = await supabase
+          .from('sessions')
+          .update(sessionToRow(nextSession))
+          .eq('id', nextSession.dbId);
 
-      if (error) {
-        showNotice(`主催設定の保存エラー: ${error.message}`);
-        return;
+        if (error) {
+          showNotice(`主催設定の保存エラー: ${error.message}`);
+          return;
+        }
+
+        showNotice('主催設定を保存しました。');
+      } else {
+        saveLocal({ session: nextSession });
+        showNotice('主催設定を保存しました。');
       }
-
-      showNotice('主催設定を保存しました。');
-    } else {
-      saveLocal({ session: nextSession });
-      showNotice('主催設定を保存しました。');
+    } finally {
+      setSavingAction('');
     }
   }
 
   async function joinOrEdit() {
-    const name = draft.name.trim();
-    if (!name) return showNotice('名前を入力してください。');
-    if (!session.dbId && supabaseReady) return showNotice('先にページを生成してください。');
+    setSavingAction('join');
+    try {
 
-    const safeDraft = !isOwner && draft.role === 'host'
-      ? { ...draft, role: 'participant' as Role }
-      : draft;
-    const existing = participants.find((p) => p.name === name);
-    let nextParticipant: Participant = existing
-      ? { ...existing, ...safeDraft, name }
-      : { id: cryptoRandom(10), ...safeDraft, name };
+        const name = draft.name.trim();
+        if (!name) return showNotice('名前を入力してください。');
+        if (!session.dbId && supabaseReady) return showNotice('先にページを生成してください。');
 
-    if (supabaseReady && supabase && session.dbId) {
-      const { data, error } = await supabase
-        .from('participants')
-        .upsert(
-          {
-            session_id: session.dbId,
-            name,
-            role: nextParticipant.role,
-            preferences: nextParticipant.preferences,
-            consecutive_preference: nextParticipant.consecutivePreference,
-            comment: nextParticipant.comment,
-          },
-          { onConflict: 'session_id,name' }
-        )
-        .select()
-        .single();
+        const safeDraft = !isOwner && draft.role === 'host'
+          ? { ...draft, role: 'participant' as Role }
+          : draft;
+        const existing = participants.find((p) => p.name === name);
+        let nextParticipant: Participant = existing
+          ? { ...existing, ...safeDraft, name }
+          : { id: cryptoRandom(10), ...safeDraft, name };
 
-      if (error) {
-        showNotice(`参加者保存エラー: ${error.message}`);
-        return;
-      }
+        if (supabaseReady && supabase && session.dbId) {
+          const { data, error } = await supabase
+            .from('participants')
+            .upsert(
+              {
+                session_id: session.dbId,
+                name,
+                role: nextParticipant.role,
+                preferences: nextParticipant.preferences,
+                consecutive_preference: nextParticipant.consecutivePreference,
+                comment: nextParticipant.comment,
+              },
+              { onConflict: 'session_id,name' }
+            )
+            .select()
+            .single();
 
-      const dbParticipant = rowToParticipant(data);
-      const oldId = existing?.id;
-      nextParticipant = dbParticipant;
+          if (error) {
+            showNotice(`参加者保存エラー: ${error.message}`);
+            return;
+          }
 
-      if (oldId && oldId !== dbParticipant.id && availability[oldId]) {
-        setAvailability((prev) => {
-          const next = { ...prev, [dbParticipant.id]: prev[oldId] };
-          delete next[oldId];
+          const dbParticipant = rowToParticipant(data);
+          const oldId = existing?.id;
+          nextParticipant = dbParticipant;
+
+          if (oldId && oldId !== dbParticipant.id && availability[oldId]) {
+            setAvailability((prev) => {
+              const next = { ...prev, [dbParticipant.id]: prev[oldId] };
+              delete next[oldId];
+              return next;
+            });
+          }
+        }
+
+        setParticipants((prev) => {
+          const next = existing
+            ? prev.map((p) => (p.name === name ? nextParticipant : p))
+            : [...prev, nextParticipant];
+          saveLocal({ participants: next });
           return next;
         });
-      }
+        setActiveName(name);
+        showNotice(existing ? '同じ名前の入力を上書きしました。' : '参加者を登録しました。');
+      } finally {
+      setSavingAction('');
     }
-
-    setParticipants((prev) => {
-      const next = existing
-        ? prev.map((p) => (p.name === name ? nextParticipant : p))
-        : [...prev, nextParticipant];
-      saveLocal({ participants: next });
-      return next;
-    });
-    setActiveName(name);
-    showNotice(existing ? '同じ名前の入力を上書きしました。' : '参加者を登録しました。');
   }
 
   async function persistAvailability(participant: Participant, nextAvailability: Record<string, Status>) {
@@ -525,28 +566,41 @@ function App() {
   }
 
   async function saveActiveSchedule() {
-    if (!activeParticipant) return showNotice('先に参加者を選択してください。');
-    const ok = await persistAvailability(activeParticipant, availability[activeParticipant.id] || {});
-    if (ok) {
-      saveLocal();
-      showNotice('日程を保存しました。');
+    setSavingAction('schedule');
+    try {
+
+        if (!activeParticipant) return showNotice('先に参加者を選択してください。');
+        const ok = await persistAvailability(activeParticipant, availability[activeParticipant.id] || {});
+        if (ok) {
+          saveLocal();
+          showNotice('日程を保存しました。');
+        }
+      } finally {
+      setSavingAction('');
     }
   }
 
   async function bulk(mode: string) {
-    if (!activeParticipant) return;
-    const next: Record<string, Status> = { ...(availability[activeParticipant.id] || {}) };
-    for (const date of dates) {
-      if (mode === 'all-maybe') next[date] = 'maybe';
-      if (mode === 'all-ng') next[date] = 'ng';
-      if (mode === 'weekend-ok-weekday-night') next[date] = isWeekend(date) ? 'ok' : 'night';
-      if (mode.startsWith('weekday-') && weekdayIndex(date) === Number(mode.split('-')[1])) next[date] = 'ng';
+    setSavingAction(`bulk-${mode}`);
+    try {
+
+        if (!activeParticipant) return;
+        const next: Record<string, Status> = { ...(availability[activeParticipant.id] || {}) };
+        for (const date of dates) {
+          if (mode === 'all-maybe') next[date] = 'maybe';
+          if (mode === 'all-ng') next[date] = 'ng';
+          if (mode === 'all-night') next[date] = 'night';
+          if (mode === 'weekend-ok-weekday-night') next[date] = isWeekend(date) ? 'ok' : 'night';
+          if (mode.startsWith('weekday-') && weekdayIndex(date) === Number(mode.split('-')[1])) next[date] = 'ng';
+        }
+        const nextAll = { ...availability, [activeParticipant.id]: next };
+        setAvailability(nextAll);
+        saveLocal({ availability: nextAll });
+        await persistAvailability(activeParticipant, next);
+        showNotice('一括入力を保存しました。');
+      } finally {
+      setSavingAction('');
     }
-    const nextAll = { ...availability, [activeParticipant.id]: next };
-    setAvailability(nextAll);
-    saveLocal({ availability: nextAll });
-    await persistAvailability(activeParticipant, next);
-    showNotice('一括入力を保存しました。');
   }
 
   function runTextExtract() {
@@ -556,16 +610,22 @@ function App() {
   }
 
   async function applyExtractedNg() {
-    if (!activeParticipant) return showNotice('先に参加者を選択してください。');
-    const selected = extractedDates.filter((d) => d.checked).map((d) => d.date);
-    if (!selected.length) return showNotice('反映する日付が選択されていません。');
-    const next: Record<string, Status> = { ...(availability[activeParticipant.id] || {}) };
-    for (const date of selected) next[date] = 'ng';
-    const nextAll = { ...availability, [activeParticipant.id]: next };
-    setAvailability(nextAll);
-    saveLocal({ availability: nextAll });
-    await persistAvailability(activeParticipant, next);
-    showNotice(`${selected.length}件を❌にして保存しました。`);
+    setSavingAction('extract-apply');
+    try {
+
+        if (!activeParticipant) return showNotice('先に参加者を選択してください。');
+        const selected = extractedDates.filter((d) => d.checked).map((d) => d.date);
+        if (!selected.length) return showNotice('反映する日付が選択されていません。');
+        const next: Record<string, Status> = { ...(availability[activeParticipant.id] || {}) };
+        for (const date of selected) next[date] = 'ng';
+        const nextAll = { ...availability, [activeParticipant.id]: next };
+        setAvailability(nextAll);
+        saveLocal({ availability: nextAll });
+        await persistAvailability(activeParticipant, next);
+        showNotice(`${selected.length}件を❌にして保存しました。`);
+      } finally {
+      setSavingAction('');
+    }
   }
 
   function selectExistingParticipant(name: string) {
@@ -602,7 +662,7 @@ function App() {
 
       {view === 'top' && (
         <main className="hero">
-          <p className="eyebrow">Version 1.0.11</p>
+          <p className="eyebrow">Version 1.0.16</p>
           <h1>条件から、開催案を組み立てる。</h1>
           <p>複数人の日程を入力し、必要コマ数・参加人数・希望条件から候補案を提案します。</p>
           <div className="actions">
@@ -622,7 +682,7 @@ function App() {
               <label>開始日<input type="date" value={session.startDate} onChange={(e) => setSession({ ...session, startDate: e.target.value })} /></label>
               <label>終了日<input type="date" value={session.endDate} onChange={(e) => setSession({ ...session, endDate: e.target.value })} /></label>
             </div>
-            <button className="primary" onClick={createPage} disabled={loading}>ページを生成して保存</button>
+            <button className="primary" onClick={createPage} disabled={loading || savingAction === 'create'}>{savingAction === 'create' ? '生成・保存中...' : 'ページを生成して保存'}</button>
           </section>
 
         </main>
@@ -675,14 +735,8 @@ function App() {
               </select></label>
               <label>補助コメント<textarea value={draft.comment} onChange={(e) => setDraft({ ...draft, comment: e.target.value })} /></label>
             </div>
-            <button className="primary" onClick={joinOrEdit}>参加する / 編集する</button>
+            <button className="primary" onClick={joinOrEdit} disabled={savingAction === 'join'}>{savingAction === 'join' ? '保存中...' : '参加する / 編集する'}</button>
           </section>
-
-          <PublicAvailabilitySummary
-            dates={dates}
-            participants={publicParticipants}
-            availability={availability}
-          />
 
           <section className="panel span">
             <h2>予定入力</h2>
@@ -690,10 +744,11 @@ function App() {
               <>
                 <p><b>{activeParticipant.name}</b> さんの日程を入力中</p>
                 <div className="bulk">
-                  <button onClick={() => bulk('weekend-ok-weekday-night')}>土日⭕️・平日🌙</button>
-                  <button onClick={() => bulk('all-maybe')}>全日保留</button>
-                  <button onClick={() => bulk('all-ng')}>全日❌</button>
-                  {['日', '月', '火', '水', '木', '金', '土'].map((w, i) => <button key={w} onClick={() => bulk(`weekday-${i}`)}>{w}曜❌</button>)}
+                  <button onClick={() => bulk('weekend-ok-weekday-night')} disabled={savingAction === 'bulk-weekend-ok-weekday-night'}>{savingAction === 'bulk-weekend-ok-weekday-night' ? '保存中...' : '土日⭕️・平日🌙'}</button>
+                  <button onClick={() => bulk('all-night')} disabled={savingAction === 'bulk-all-night'}>{savingAction === 'bulk-all-night' ? '保存中...' : '全日🌙'}</button>
+                  <button onClick={() => bulk('all-maybe')} disabled={savingAction === 'bulk-all-maybe'}>{savingAction === 'bulk-all-maybe' ? '保存中...' : '全日保留'}</button>
+                  <button onClick={() => bulk('all-ng')} disabled={savingAction === 'bulk-all-ng'}>{savingAction === 'bulk-all-ng' ? '保存中...' : '全日❌'}</button>
+                  {['日', '月', '火', '水', '木', '金', '土'].map((w, i) => <button key={w} onClick={() => bulk(`weekday-${i}`)} disabled={savingAction === `bulk-weekday-${i}`}>{savingAction === `bulk-weekday-${i}` ? '保存中...' : `${w}曜❌`}</button>)}
                 </div>
                 <TextImportBox
                   text={pasteText}
@@ -702,9 +757,23 @@ function App() {
                   setExtracted={setExtractedDates}
                   onExtract={runTextExtract}
                   onApply={applyExtractedNg}
+                  savingAction={savingAction}
                 />
-                <Calendar dates={dates} value={availability[activeParticipant.id] || {}} onChange={setStatus} />
-                <button className="primary" onClick={saveActiveSchedule}>日程を保存</button>
+                <div className="calendar-summary-note">
+                  <h3>みんなの入力状況</h3>
+                  <p>登録済み人数：{participants.length}人</p>
+                  {participants.length > 0 ? (
+                    <div className="name-chips">
+                      {participants.map((participant) => (
+                        <span className="name-chip" key={participant.id}>{participant.name}</span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="muted">まだ参加者は登録されていません。</p>
+                  )}
+                </div>
+                <Calendar dates={dates} value={availability[activeParticipant.id] || {}} onChange={setStatus} summaryByDate={availabilitySummary} />
+                <button className="primary" onClick={saveActiveSchedule} disabled={savingAction === 'schedule'}>{savingAction === 'schedule' ? '保存中...' : '日程を保存'}</button>
               </>
             ) : (
               <p>先に名前を入れて「参加する」を押してください。</p>
@@ -715,8 +784,8 @@ function App() {
 
       {view === 'admin' && isOwner && (
         <>
-          <main className="grid two wide">
-            <section className="panel">
+          <main className="grid admin-owner-grid">
+            <section className="panel owner-entry-panel">
               <h2>主催者自身の参加登録</h2>
               <p className="muted">主催者もここで名前・役割・希望条件を登録し、日程を入力できます。</p>
               {participants.length > 0 && (
@@ -761,7 +830,7 @@ function App() {
                 </select></label>
                 <label>補助コメント<textarea value={draft.comment} onChange={(e) => setDraft({ ...draft, comment: e.target.value })} /></label>
               </div>
-              <button className="primary" onClick={joinOrEdit}>参加情報を保存</button>
+              <button className="primary" onClick={joinOrEdit} disabled={savingAction === 'join'}>{savingAction === 'join' ? '保存中...' : '参加情報を保存'}</button>
             </section>
 
             <section className="panel span">
@@ -770,10 +839,11 @@ function App() {
                 <>
                   <p><b>{activeParticipant.name}</b> さんの日程を入力中</p>
                   <div className="bulk">
-                    <button onClick={() => bulk('weekend-ok-weekday-night')}>土日⭕️・平日🌙</button>
-                    <button onClick={() => bulk('all-maybe')}>全日保留</button>
-                    <button onClick={() => bulk('all-ng')}>全日❌</button>
-                    {['日', '月', '火', '水', '木', '金', '土'].map((w, i) => <button key={w} onClick={() => bulk(`weekday-${i}`)}>{w}曜❌</button>)}
+                    <button onClick={() => bulk('weekend-ok-weekday-night')} disabled={savingAction === 'bulk-weekend-ok-weekday-night'}>{savingAction === 'bulk-weekend-ok-weekday-night' ? '保存中...' : '土日⭕️・平日🌙'}</button>
+                    <button onClick={() => bulk('all-night')} disabled={savingAction === 'bulk-all-night'}>{savingAction === 'bulk-all-night' ? '保存中...' : '全日🌙'}</button>
+                    <button onClick={() => bulk('all-maybe')} disabled={savingAction === 'bulk-all-maybe'}>{savingAction === 'bulk-all-maybe' ? '保存中...' : '全日保留'}</button>
+                    <button onClick={() => bulk('all-ng')} disabled={savingAction === 'bulk-all-ng'}>{savingAction === 'bulk-all-ng' ? '保存中...' : '全日❌'}</button>
+                    {['日', '月', '火', '水', '木', '金', '土'].map((w, i) => <button key={w} onClick={() => bulk(`weekday-${i}`)} disabled={savingAction === `bulk-weekday-${i}`}>{savingAction === `bulk-weekday-${i}` ? '保存中...' : `${w}曜❌`}</button>)}
                   </div>
                   <TextImportBox
                     text={pasteText}
@@ -782,9 +852,10 @@ function App() {
                     setExtracted={setExtractedDates}
                     onExtract={runTextExtract}
                     onApply={applyExtractedNg}
+                    savingAction={savingAction}
                   />
-                  <Calendar dates={dates} value={availability[activeParticipant.id] || {}} onChange={setStatus} />
-                  <button className="primary" onClick={saveActiveSchedule}>日程を保存</button>
+                  <Calendar dates={dates} value={availability[activeParticipant.id] || {}} onChange={setStatus} summaryByDate={availabilitySummary} />
+                  <button className="primary" onClick={saveActiveSchedule} disabled={savingAction === 'schedule'}>{savingAction === 'schedule' ? '保存中...' : '日程を保存'}</button>
                 </>
               ) : (
                 <p>先に名前を入れて「参加情報を保存」を押してください。</p>
@@ -802,6 +873,8 @@ function App() {
             adminUrl={adminUrl}
             shareUrl={shareUrl}
             onSave={saveSessionSettings}
+            savingAction={savingAction}
+            copyToClipboard={copyToClipboard}
           />
         </>
       )}
@@ -810,7 +883,7 @@ function App() {
 
       <footer>
         <a href="https://x.com/tooshobt" target="_blank" rel="noopener noreferrer">お問い合わせ</a>
-        <span>日程ぴたパズル Version 1.0.11</span>
+        <span>日程ぴたパズル Version 1.0.16</span>
       </footer>
     </div>
   );
@@ -823,6 +896,7 @@ function TextImportBox({
   setExtracted,
   onExtract,
   onApply,
+  savingAction,
 }: {
   text: string;
   setText: (v: string) => void;
@@ -830,6 +904,7 @@ function TextImportBox({
   setExtracted: (v: ExtractedDate[]) => void;
   onExtract: () => void;
   onApply: () => void;
+  savingAction?: string;
 }) {
   return (
     <section className="text-import">
@@ -838,7 +913,7 @@ function TextImportBox({
       <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={'例：7月 1日 3日 5日\n7月 3日 ▼5日 ☆8日\n20, 21, 22 NG'} />
       <div className="actions">
         <button onClick={onExtract}>日付を抽出</button>
-        <button className="primary" onClick={onApply}>選択した日を❌にする</button>
+        <button className="primary" onClick={onApply} disabled={savingAction === 'extract-apply'}>{savingAction === 'extract-apply' ? '反映中...' : '選択した日を❌にする'}</button>
       </div>
       {extracted.length > 0 && (
         <div className="extract-results">
@@ -850,51 +925,6 @@ function TextImportBox({
             </label>
           ))}
         </div>
-      )}
-    </section>
-  );
-}
-
-function PublicAvailabilitySummary({ dates, participants, availability }: {
-  dates: string[];
-  participants: Participant[];
-  availability: AvailabilityMap;
-}) {
-  const countsByDate = dates.map((date) => {
-    const counts: Record<Status, number> = { ok: 0, night: 0, day: 0, maybe: 0, ng: 0 };
-    for (const participant of participants) {
-      const status = availability[participant.id]?.[date];
-      if (status) counts[status] += 1;
-    }
-    return { date, counts };
-  });
-
-  return (
-    <section className="panel span">
-      <h2>みんなの入力状況</h2>
-      <p>登録済み人数：{participants.length}人</p>
-      {participants.length > 0 ? (
-        <>
-          <div className="name-chips">
-            {participants.map((participant) => (
-              <span className="name-chip" key={participant.id}>{participant.name}</span>
-            ))}
-          </div>
-          <div className="summary-list">
-            {countsByDate.map(({ date, counts }) => (
-              <div className="summary-row" key={date}>
-                <b>{displayDate(date)}（{weekday(date)}）</b>
-                <span>⭕️ {counts.ok}</span>
-                <span>🌙 {counts.night}</span>
-                <span>🌞 {counts.day}</span>
-                <span>保留 {counts.maybe}</span>
-                <span>❌ {counts.ng}</span>
-              </div>
-            ))}
-          </div>
-        </>
-      ) : (
-        <p className="muted">まだ参加者は登録されていません。</p>
       )}
     </section>
   );
@@ -943,7 +973,7 @@ function AdminAvailabilityMatrix({ dates, participants, availability }: {
   );
 }
 
-function Admin({ session, setSession, participants, dates, availability, scheduleResult, participantCount, adminUrl, shareUrl, onSave }: any) {
+function Admin({ session, setSession, participants, dates, availability, scheduleResult, participantCount, adminUrl, shareUrl, onSave, savingAction, copyToClipboard }: any) {
   const candidates = scheduleResult.plans || [];
   const medal = ['🥇', '🥈', '🥉'];
 
@@ -959,9 +989,10 @@ function Admin({ session, setSession, participants, dates, availability, schedul
 <code>{shareUrl}</code>
 
 <button
-  onClick={() => navigator.clipboard.writeText(shareUrl)}
+  onClick={() => copyToClipboard(shareUrl, '参加URL', 'copy-share')}
+  disabled={savingAction === 'copy-share'}
 >
-  📋 参加URLをコピー
+  {savingAction === 'copy-share' ? 'コピーしました' : '📋 参加URLをコピー'}
 </button>
 
 <details style={{ marginTop: 12 }}>
@@ -972,9 +1003,10 @@ function Admin({ session, setSession, participants, dates, availability, schedul
   <code>{adminUrl}</code>
 
   <button
-    onClick={() => navigator.clipboard.writeText(adminUrl)}
+    onClick={() => copyToClipboard(adminUrl, '管理用URL', 'copy-admin')}
+    disabled={savingAction === 'copy-admin'}
   >
-    📋 管理用URLをコピー
+    {savingAction === 'copy-admin' ? 'コピーしました' : '📋 管理用URLをコピー'}
   </button>
 </details>
         <label>必要コマ数<input type="number" min="1" value={session.requiredSlots} onChange={(e) => patchSession({ requiredSlots: Number(e.target.value) })} /></label>
@@ -998,7 +1030,7 @@ function Admin({ session, setSession, participants, dates, availability, schedul
           <option value="penalty">できれば避ける</option>
           <option value="ban">禁止する</option>
         </select></label>
-        <button className="primary" onClick={() => onSave(session)}>主催設定を保存</button>
+        <button className="primary" onClick={() => onSave(session)} disabled={savingAction === 'settings'}>{savingAction === 'settings' ? '保存中...' : '主催設定を保存'}</button>
       </section>
 
       <section className="panel">
