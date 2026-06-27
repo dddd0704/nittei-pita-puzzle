@@ -13,8 +13,3 @@ npm run dev
 - `7/1`, `7月1日`, `7月 1日 3日`, `20, 21, 22 NG` などに対応
 - カレンダー外枠はみ出し防止
 - 日付処理をローカル日付ベースに固定
-
-## Supabase設定
-
-`.env.local.example` を `.env.local` にコピーして、Project URL と Publishable key を貼ってください。
-Secret key は入れないでください。

@@ -103,7 +103,7 @@ function localKey(shareId: string) {
 }
 
 const initialSession: SessionSettings = {
-  title: '7月セッション日程調整',
+  title: '日程調整',
   description: '候補期間に参加できる日程を入力してください。',
   startDate: '2026-07-01',
   endDate: '2026-07-31',
@@ -519,7 +519,7 @@ function App() {
         <button className="brand" onClick={() => { history.pushState(null, '', '/'); setView('top'); }}>日程ぴたパズル</button>
         <nav>
           <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>{theme === 'light' ? '🌙' : '🌞'} 表示切替</button>
-          <button onClick={() => setFontSize(fontSize === 'normal' ? 'large' : 'normal')}>{fontSize === 'normal' ? '文字を大きく' : '標準サイズ'}</button>
+          <button onClick={() => setFontSize(fontSize === 'normal' ? 'large' : 'normal')}>{fontSize === 'normal' ? '文字を大きめ' : '標準サイズ'}</button>
           <button onClick={() => setView('legal')}>運営・規約</button>
         </nav>
       </header>
@@ -529,7 +529,7 @@ function App() {
 
       {view === 'top' && (
         <main className="hero">
-          <p className="eyebrow">Version 1.0.8</p>
+          <p className="eyebrow">Version 1.0.10</p>
           <h1>条件から、開催案を組み立てる。</h1>
           <p>複数人の日程を入力し、必要コマ数・参加人数・希望条件から候補案を提案します。</p>
           <div className="actions">
@@ -568,7 +568,7 @@ function App() {
         <main className="grid two wide">
           <section className="panel">
             <h2>{session.title}</h2>
-            <p>{session.description}</p>
+            <p className="description-text">{session.description}</p>
             <div className="url-box">
               <p>参加URL</p>
               <code>{shareUrl}</code>
@@ -662,7 +662,7 @@ function App() {
       <footer>
         <button onClick={() => setView('admin')}>主催画面</button>
         <button onClick={() => setView('join')}>参加画面</button>
-        <span>日程ぴたパズル Version 1.0.8</span>
+        <span>日程ぴたパズル Version 1.0.10</span>
       </footer>
     </div>
   );
@@ -788,8 +788,8 @@ function Admin({ session, setSession, participants, scheduleResult, participantC
 function AdBoxes() {
   return (
     <section className="ad-grid">
-      <div className="adbox"><b>Amazonおすすめ枠</b><p>TRPG向けマイク、ダイス、ルールブックなどを置く場所。</p></div>
-      <div className="adbox"><b>Google広告枠</b><p>AdSenseコードを公開後に差し替える場所。</p></div>
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2326338968692797"
+     crossorigin="anonymous"></script>
     </section>
   );
 }
@@ -804,9 +804,10 @@ function Legal() {
       <h3>利用規約</h3>
       <p>本サービスは日程調整を補助するもので、データ保存や候補計算の完全性を保証しません。保存期間は原則3か月です。</p>
       <h3>お問い合わせ</h3>
-      <p>公開前に連絡先メール、X、BOOTHなどへ差し替えてください。</p>
-      <h3>運営者情報</h3>
-      <p>公開前に運営者名またはハンドルネームを記載してください。</p>
+      <p>https://cur1um.booth.pm/</p>
+      <p>https://x.com/tooshobt</p>
+      <h3>ほしいものリスト</h3>
+      <p>https://www.amazon.jp/hz/wishlist/ls/SIRICYBV5ACF?ref_=wl_share</p>
     </main>
   );
 }
