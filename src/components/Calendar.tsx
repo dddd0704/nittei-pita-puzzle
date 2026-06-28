@@ -1,4 +1,3 @@
-import React from "react";
 import {
     buildCalendarWeeks,
     displayDate,
@@ -21,7 +20,7 @@ const statusOptions = [
     { value: "night", label: "🌙", summaryLabel: "🌙" },
     { value: "day", label: "🌞", summaryLabel: "🌞" },
     { value: "maybe", label: "保留", summaryLabel: "?" },
-    { value: "ng", label: "❌", summaryLabel: "×" },
+    { value: "ng", label: "❌", summaryLabel: "❌" },
 ] as const;
 
 type SummaryCounts = Partial<Record<Status, number>>;
@@ -55,42 +54,32 @@ function AvailabilitySummary({ counts }: { counts?: SummaryCounts }) {
     if (total === 0) return null;
 
     return (
-        <div className="calendar-summary" aria-label="入力状況集計：⭕、🌙、🌞、保留、❌の順">
-            <div className="calendar-summary-icons" aria-hidden="true">
-                {statusOptions.map((option) => (
-                    <span key={option.value} className={`calendar-summary-icon summary-${option.value}`}>
-                        {option.summaryLabel}
-                    </span>
-                ))}
-            </div>
-            <div className="calendar-summary-counts">
-                {statusOptions.map((option) => (
-                    <span
-                        key={option.value}
-                        className={`calendar-summary-number summary-${option.value}`}
-                        title={`${option.label}: ${counts[option.value] || 0}`}
-                    >
-                        {counts[option.value] || 0}
-                    </span>
-                ))}
-            </div>
+        <div className="calendar-summary">
+            {statusOptions.map((option) => (
+                <span key={option.value} className={`calendar-summary-pair summary-${option.value}`}>
+                    <span className="calendar-summary-icon">{option.summaryLabel}</span>
+                    <span className="calendar-summary-number">{counts[option.value] || 0}</span>
+                </span>
+            ))}
         </div>
     );
 }
 
-function dayClass(date: string) {
-    const day = new Date(`${date}T00:00:00`).getDay();
+function dateClassName(date: string) {
+    const day = weekday(date);
     const holiday = getHolidayName(date);
-    if (day === 6) return "is-saturday";
-    if (day === 0 || holiday) return "is-sunday-or-holiday";
+
+    if (day === "土") return "is-saturday";
+    if (day === "日" || holiday) return "is-sunday-or-holiday";
     return "";
 }
 
-function weekdayClass(date: string) {
-    const day = new Date(`${date}T00:00:00`).getDay();
+function weekdayClassName(date: string) {
+    const day = weekday(date);
     const holiday = getHolidayName(date);
-    if (day === 6) return "weekday-sat";
-    if (day === 0 || holiday) return "weekday-sun";
+
+    if (day === "土") return "weekday-sat";
+    if (day === "日" || holiday) return "weekday-sun";
     return "";
 }
 
@@ -126,9 +115,9 @@ export default function Calendar({
                             const holiday = getHolidayName(date);
 
                             return (
-                                <div className={`day ${dayClass(date)}`} key={date}>
+                                <div className={`day ${dateClassName(date)}`} key={date}>
                                     <strong>
-                                        {displayDate(date)}（<span className={weekdayClass(date)}>{weekday(date)}</span>）
+                                        {displayDate(date)}（<span className={weekdayClassName(date)}>{weekday(date)}</span>）
                                     </strong>
 
                                     {holiday && (
@@ -150,9 +139,9 @@ export default function Calendar({
 
             <div className="mobile-list">
                 {dates.map((date) => (
-                    <div className={`mobile-day ${dayClass(date)}`} key={date}>
+                    <div className={`mobile-day ${dateClassName(date)}`} key={date}>
                         <strong>
-                            {displayDate(date)}（<span className={weekdayClass(date)}>{weekday(date)}</span>）
+                            {displayDate(date)}（<span className={weekdayClassName(date)}>{weekday(date)}</span>）
                         </strong>
 
                         {getHolidayName(date) && (
